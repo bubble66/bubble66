@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>koko-muddy-day</title>
+    <style>
+      :root {
+        --bg: #121212;
+        --text: #e0e0e0;
+        --bar-bg: rgba(20, 20, 20, 0.9);
+        --accent: #4a90e2;
+        --caption-bg: rgba(0, 0, 0, 0.6);
+        --max-width: 800px;
+      }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      body {
+        margin: 0;
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        overflow-x: hidden;
+      }
+      
+      /* Header / Toolbar */
+      #header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 50px;
+        background: var(--bar-bg);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        z-index: 100;
+        transition: transform 0.3s ease;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+      }
+      body.ui-hidden #header {
+        transform: translateY(-100%);
+      }
+      .title {
+        font-weight: 600;
+        font-size: 16px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 60%;
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        font-size: 14px;
+        align-items: center;
+      }
+      button {
+        background: transparent;
+        border: 1px solid rgba(255,255,255,0.2);
+        color: var(--text);
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      button.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      /* Reader Container */
+      #reader {
+        width: 100%;
+        min-height: 100vh;
+        padding-top: 50px; /* space for header */
+        transition: padding-top 0.3s;
+      }
+      body.ui-hidden #reader {
+        padding-top: 0; /* Fullscreen feel */
+      }
+
+      /* Scroll Mode (Vertical Webtoon style) */
+      body.mode-scroll #reader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-bottom: 100px;
+      }
+      body.mode-scroll .page-container {
+        width: 100%;
+        max-width: var(--max-width);
+        position: relative;
+        margin: 0 0 20px 0; /* Add gap for caption */
+        line-height: 0;
+        background: #000;
+      }
+      body.mode-scroll img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      
+      /* Page Mode (Single page fit) */
+      body.mode-page #reader {
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      body.mode-page .page-container {
+        display: none;
+        width: 100%;
+        height: 100%;
+        max-width: var(--max-width);
+        position: relative;
+      }
+      body.mode-page .page-container.active {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      body.mode-page img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+      }
+
+      /* Caption Styles */
+      .caption {
+        background: var(--caption-bg);
+        color: #fff;
+        padding: 12px 16px;
+        font-size: 16px;
+        line-height: 1.5;
+        text-align: center;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      
+      /* Scroll mode caption: appear below image */
+      body.mode-scroll .caption {
+        background: transparent;
+        color: #ccc;
+        padding: 10px 16px 20px;
+        font-size: 15px;
+        text-align: left;
+      }
+
+      /* Page mode caption: overlay at bottom */
+      body.mode-page .caption {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, rgba(0,0,0,0.9));
+        padding-bottom: 30px;
+        padding-top: 40px;
+        transition: opacity 0.3s;
+      }
+      body.ui-hidden.mode-page .caption {
+        opacity: 0; /* Hide caption when UI hidden in page mode? Or keep it? Let's keep it visible or optional. */
+        /* Actually, let's keep caption visible even if UI hidden, or maybe toggle with UI. */
+        opacity: 1; 
+      }
+
+      /* Touch Zones for Page Mode */
+      .touch-zone {
+        position: fixed;
+        top: 50px;
+        bottom: 0;
+        width: 30%;
+        z-index: 50;
+      }
+      .touch-left { left: 0; }
+      .touch-right { right: 0; }
+      .touch-center {
+        left: 30%;
+        width: 40%;
+        cursor: pointer;
+      }
+      body.mode-scroll .touch-zone { display: none; }
+
+      /* Progress */
+      #progress {
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      
+      /* Navigation (Bottom) */
+      #nav-hint {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.7);
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 12px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      body.ui-hidden.mode-page #nav-hint {
+        opacity: 1;
+      }
+
+    </style>
+  </head>
+  <body class="mode-scroll"> <!-- Default to Scroll mode -->
+    <div id="header">
+      <div class="title">koko-muddy-day</div>
+      <div class="controls">
+        <span id="progress">1 / --</span>
+        <button id="btnMode" title="Toggle Reading Mode">Scroll</button>
+      </div>
+    </div>
+
+    <!-- Click zones for paged mode -->
+    <div class="touch-zone touch-left" id="zonePrev"></div>
+    <div class="touch-zone touch-center" id="zoneMenu"></div>
+    <div class="touch-zone touch-right" id="zoneNext"></div>
+
+    <div id="reader"></div>
+    
+    <div id="nav-hint">Tap sides to flip • Center for menu</div>
+
+    <script>
+      const IMAGES = [{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/00-cover.png","name":"00-cover.png","caption":"Koko's Muddy Day"},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/01-page.png","name":"01-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/02-page.png","name":"02-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/03-page.png","name":"03-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/04-page.png","name":"04-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/05-page.png","name":"05-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/06-page.png","name":"06-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/07-page.png","name":"07-page.png","caption":""},{"src":"https://haohao2023.tos-s3-cn-beijing.volces.com/comics/2026-01-18/koko-muddy-day/08-page.png","name":"08-page.png","caption":""}];
+      const state = {
+        mode: "scroll", // scroll | page
+        currentIndex: 0,
+        uiVisible: true
+      };
+
+      const els = {
+        body: document.body,
+        reader: document.getElementById("reader"),
+        header: document.getElementById("header"),
+        progress: document.getElementById("progress"),
+        btnMode: document.getElementById("btnMode"),
+        zonePrev: document.getElementById("zonePrev"),
+        zoneNext: document.getElementById("zoneNext"),
+        zoneMenu: document.getElementById("zoneMenu"),
+      };
+
+      // --- Initialization ---
+      function init() {
+        renderImages();
+        updateMeta();
+        setupObservers();
+      }
+
+      function renderImages() {
+        els.reader.innerHTML = "";
+        IMAGES.forEach((img, idx) => {
+          const div = document.createElement("div");
+          div.className = "page-container";
+          div.id = "page-" + idx;
+          if (idx === 0) div.classList.add("active"); // for page mode
+
+          const image = document.createElement("img");
+          image.src = img.src;
+          image.loading = idx < 2 ? "eager" : "lazy"; 
+          image.alt = img.name;
+          div.appendChild(image);
+
+          if (img.caption) {
+            const caption = document.createElement("div");
+            caption.className = "caption";
+            caption.textContent = img.caption;
+            div.appendChild(caption);
+          }
+          
+          els.reader.appendChild(div);
+        });
+      }
+
+      // --- Mode Switching ---
+      function setMode(newMode) {
+        state.mode = newMode;
+        els.body.className = "mode-" + newMode;
+        els.btnMode.textContent = newMode === "scroll" ? "Scroll" : "Page";
+        
+        if (newMode === "page") {
+          goToPage(state.currentIndex);
+          window.scrollTo(0, 0);
+        } else {
+          // scroll to current page
+          const target = document.getElementById("page-" + state.currentIndex);
+          if (target) target.scrollIntoView();
+        }
+      }
+
+      els.btnMode.addEventListener("click", () => {
+        setMode(state.mode === "scroll" ? "page" : "scroll");
+      });
+
+      // --- Navigation (Page Mode) ---
+      function goToPage(idx) {
+        if (idx < 0) idx = 0;
+        if (idx >= IMAGES.length) idx = IMAGES.length - 1;
+        state.currentIndex = idx;
+
+        // Toggle visibility
+        const containers = document.querySelectorAll(".page-container");
+        containers.forEach((el, i) => {
+          if (i === idx) el.classList.add("active");
+          else el.classList.remove("active");
+        });
+        
+        updateMeta();
+      }
+
+      function nextPage() { goToPage(state.currentIndex + 1); }
+      function prevPage() { goToPage(state.currentIndex - 1); }
+
+      // --- Interaction ---
+      function toggleUI() {
+        state.uiVisible = !state.uiVisible;
+        if (state.uiVisible) els.body.classList.remove("ui-hidden");
+        else els.body.classList.add("ui-hidden");
+      }
+
+      els.zonePrev.addEventListener("click", (e) => { e.stopPropagation(); prevPage(); });
+      els.zoneNext.addEventListener("click", (e) => { e.stopPropagation(); nextPage(); });
+      els.zoneMenu.addEventListener("click", (e) => { e.stopPropagation(); toggleUI(); });
+      
+      // Scroll mode interaction (click center to toggle UI)
+      els.reader.addEventListener("click", (e) => {
+        if (state.mode === "scroll") toggleUI();
+      });
+
+      // Keyboard
+      document.addEventListener("keydown", (e) => {
+        if (state.mode === "page") {
+          if (e.key === "ArrowRight" || e.key === "Space") nextPage();
+          if (e.key === "ArrowLeft") prevPage();
+        }
+      });
+
+      // --- Observers (Scroll Mode Progress) ---
+      function setupObservers() {
+        const observer = new IntersectionObserver((entries) => {
+          if (state.mode !== "scroll") return;
+          // Find the visible page with max intersection ratio
+          let maxRatio = 0;
+          let maxIdx = -1;
+          
+          entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
+              maxRatio = entry.intersectionRatio;
+              maxIdx = parseInt(entry.target.id.replace("page-", ""));
+            }
+          });
+
+          if (maxIdx !== -1) {
+            state.currentIndex = maxIdx;
+            updateMeta();
+          }
+        }, { threshold: [0.1, 0.5, 0.9] });
+
+        document.querySelectorAll(".page-container").forEach(el => observer.observe(el));
+      }
+
+      function updateMeta() {
+        els.progress.textContent = `${state.currentIndex + 1} / ${IMAGES.length}`;
+      }
+
+      init();
+    </script>
+  </body>
+</html>
